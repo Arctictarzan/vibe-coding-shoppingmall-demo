@@ -1,0 +1,2246 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import { productAPI, orderAPI, customerAPI } from '../services/api';
+
+const AdminPage = () => {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [skuValidation, setSkuValidation] = useState({
+    isValid: true,
+    message: ''
+  });
+  const [editSkuValidation, setEditSkuValidation] = useState({
+    isValid: true,
+    message: ''
+  });
+  const [newProduct, setNewProduct] = useState({
+    sku: '',
+    name: '',
+    price: '',
+    originalPrice: '',
+    category: '',
+    image: {
+      url: '',
+      publicId: '',
+      alt: ''
+    },
+    additionalImages: [''],
+    description: '',
+    stock: 0,
+    brand: '',
+    tags: [],
+    isActive: true,
+    isFeatured: false,
+    productStatus: 'in_stock'
+  });
+
+  // API 호출 함수들
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await productAPI.getAllProducts();
+      
+      if (response.data.success) {
+        setProducts(response.data.data.products || []);
+      } else {
+        setError('상품 목록을 불러오는데 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('상품 목록 조회 오류:', error);
+      setError('상품 목록을 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await orderAPI.getAllOrders();
+      
+      if (response.data.success) {
+        setOrders(response.data.data || []);
+      } else {
+        setError('주문 목록을 불러오는데 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('주문 목록 조회 오류:', error);
+      setError('주문 목록을 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true);
+      const response = await customerAPI.getAllCustomers();
+      
+      if (response.data.success) {
+        setCustomers(response.data.data || []);
+      } else {
+        setError('고객 목록을 불러오는데 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('고객 목록 조회 오류:', error);
+      setError('고객 목록을 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // SKU 검증 함수
+  const validateSKU = (sku) => {
+    if (!sku) {
+      return { isValid: false, message: 'SKU를 입력해주세요.' };
+    }
+    
+    // 길이 검증
+    if (sku.length < 3 || sku.length > 20) {
+      return { isValid: false, message: 'SKU는 3-20자여야 합니다.' };
+    }
+    
+    // 형식 검증: 영문자, 숫자, 하이픈만 허용
+    if (!/^[A-Za-z0-9\-]{3,20}$/.test(sku)) {
+      return { isValid: false, message: '영문자, 숫자, 하이픈만 사용 가능합니다.' };
+    }
+    
+    // 시작이나 끝에 하이픈 불가
+    if (/^[\-]|[\-]$/.test(sku)) {
+      return { isValid: false, message: '시작이나 끝에 하이픈을 사용할 수 없습니다.' };
+    }
+    
+    // 연속된 하이픈 불가
+    if (/[\-]{2,}/.test(sku)) {
+      return { isValid: false, message: '연속된 하이픈을 사용할 수 없습니다.' };
+    }
+    
+    return { isValid: true, message: '올바른 SKU 형식입니다.' };
+  };
+
+  // SKU 입력 핸들러
+  const handleSkuChange = (value) => {
+    const upperValue = value.toUpperCase(); // 대문자로 변환
+    setNewProduct({...newProduct, sku: upperValue});
+    
+    // 실시간 검증
+    const validation = validateSKU(upperValue);
+    setSkuValidation(validation);
+  };
+
+  // 편집용 SKU 입력 핸들러
+  const handleEditSkuChange = (value) => {
+    const upperValue = value.toUpperCase(); // 대문자로 변환
+    setEditingProduct({...editingProduct, sku: upperValue});
+    
+    // 실시간 검증
+    const validation = validateSKU(upperValue);
+    setEditSkuValidation(validation);
+  };
+
+  const handleOrderStatusUpdate = async (orderId, newStatus) => {
+    try {
+      setLoading(true);
+      const response = await orderAPI.updateOrderStatus(orderId, newStatus);
+      
+      if (response.data.success) {
+        setSuccess('주문 상태가 업데이트되었습니다.');
+        fetchOrders(); // 주문 목록 새로고침
+      } else {
+        setError('주문 상태 업데이트에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('주문 상태 업데이트 오류:', error);
+      setError('주문 상태 업데이트 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCustomerToggle = async (customerId) => {
+    try {
+      setLoading(true);
+      const response = await customerAPI.toggleCustomerStatus(customerId);
+      
+      if (response.data.success) {
+        setSuccess('고객 상태가 변경되었습니다.');
+        fetchCustomers(); // 고객 목록 새로고침
+      } else {
+        setError('고객 상태 변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('고객 상태 변경 오류:', error);
+      setError('고객 상태 변경 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // SKU 자동 생성 함수
+  const generateSKU = (category) => {
+    const categoryMap = {
+      '상의': 'TOP',
+      '하의': 'BTM',
+      '악세사리': 'ACC'
+    };
+    
+    const prefix = categoryMap[category] || 'PRD';
+    const randomNum = Math.floor(Math.random() * 900) + 100; // 100-999 사이의 숫자
+    return `${prefix}-${randomNum}`;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      setLoading(true);
+      setError('');
+      setSuccess('');
+
+      // SKU가 비어있으면 자동 생성
+      let finalSku = newProduct.sku;
+      if (!finalSku && newProduct.category) {
+        finalSku = generateSKU(newProduct.category);
+      }
+
+      // SKU 검증
+      const skuValidationResult = validateSKU(finalSku);
+      if (!skuValidationResult.isValid) {
+        setError(skuValidationResult.message);
+        setLoading(false);
+        return;
+      }
+
+      const productData = {
+        ...newProduct,
+        sku: finalSku,
+        price: parseFloat(newProduct.price),
+        originalPrice: parseFloat(newProduct.originalPrice),
+        stock: parseInt(newProduct.stock)
+      };
+
+      const response = await productAPI.createProduct(productData);
+      
+      if (response.data.success) {
+        setSuccess('상품이 성공적으로 등록되었습니다!');
+        setNewProduct({
+          sku: '',
+          name: '',
+          price: '',
+          originalPrice: '',
+          category: '',
+          image: { url: '', publicId: '', alt: '' },
+          additionalImages: [''],
+          description: '',
+          stock: 0,
+          brand: '',
+          tags: [],
+          isActive: true,
+          isFeatured: false,
+          productStatus: 'in_stock'
+        });
+        fetchProducts(); // 상품 목록 새로고침
+      } else {
+        setError(response.data.message || '상품 등록에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('상품 등록 오류:', error);
+      
+      // 상세한 에러 메시지 처리
+      if (error.response?.data?.errors) {
+        const errorMessages = error.response.data.errors.join(', ');
+        setError(`입력 오류: ${errorMessages}`);
+      } else if (error.response?.data?.message) {
+        setError(error.response.data.message);
+      } else {
+        setError('상품 등록 중 오류가 발생했습니다.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 상품 편집 시작
+  const startEditProduct = (product) => {
+    setEditingProduct({
+      ...product,
+      price: product.price.toString(),
+      originalPrice: product.originalPrice ? product.originalPrice.toString() : '',
+      stock: product.stock.toString()
+    });
+    // 편집 SKU 검증 상태 초기화
+    const initialValidation = validateSKU(product.sku);
+    setEditSkuValidation(initialValidation);
+    setShowEditModal(true);
+  };
+
+  // 상품 업데이트
+  const handleUpdateProduct = async (e) => {
+    e.preventDefault();
+    
+    try {
+      setLoading(true);
+      setError('');
+      setSuccess('');
+
+      // SKU 검증
+      const skuValidationResult = validateSKU(editingProduct.sku);
+      if (!skuValidationResult.isValid) {
+        setError(skuValidationResult.message);
+        setLoading(false);
+        return;
+      }
+
+      const productData = {
+        ...editingProduct,
+        price: parseFloat(editingProduct.price),
+        originalPrice: editingProduct.originalPrice ? parseFloat(editingProduct.originalPrice) : undefined,
+        stock: parseInt(editingProduct.stock)
+      };
+
+      const response = await productAPI.updateProduct(editingProduct._id, productData);
+      
+      if (response.data.success) {
+        setSuccess('상품이 성공적으로 수정되었습니다!');
+        setShowEditModal(false);
+        setEditingProduct(null);
+        fetchProducts(); // 상품 목록 새로고침
+      } else {
+        setError(response.data.message || '상품 수정에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('상품 수정 오류:', error);
+      
+      // 상세한 에러 메시지 처리
+      if (error.response?.data?.errors) {
+        const errorMessages = error.response.data.errors.join(', ');
+        setError(`입력 오류: ${errorMessages}`);
+      } else if (error.response?.data?.message) {
+        setError(error.response.data.message);
+      } else {
+        setError('상품 수정 중 오류가 발생했습니다.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteProduct = async (productId) => {
+    if (!window.confirm('정말로 이 상품을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await productAPI.deleteProduct(productId);
+
+      if (response.data.success) {
+        fetchProducts(); // 상품 목록 새로고침
+        setSuccess('상품이 삭제되었습니다.');
+        setShowEditModal(false);
+        setEditingProduct(null);
+      } else {
+        setError('상품 삭제에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('상품 삭제 오류:', error);
+      setError('상품 삭제 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 컴포넌트 마운트 시 실행
+  useEffect(() => {
+    // 관리자 권한 확인 및 초기 데이터 로드
+    if (user && user.user_type === 'admin') {
+      if (activeTab === 'dashboard' || activeTab === 'products') {
+        fetchProducts();
+      }
+    }
+  }, [user]);
+
+  // 탭 변경 시 해당 데이터 로드
+  useEffect(() => {
+    if (user && user.user_type === 'admin') {
+      switch (activeTab) {
+        case 'products':
+          fetchProducts();
+          break;
+        case 'orders':
+          fetchOrders();
+          break;
+        case 'customers':
+          fetchCustomers();
+          break;
+        default:
+          break;
+      }
+    }
+  }, [activeTab, user]);
+
+  // 메시지 자동 삭제
+  useEffect(() => {
+    if (success || error) {
+      const timer = setTimeout(() => {
+        setSuccess('');
+        setError('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [success, error]);
+
+  const handleLogout = () => {
+    // logout 함수가 useAuth에서 제공되어야 함
+    // logout();
+    // navigate('/');
+    localStorage.removeItem('token');
+    window.location.href = '/';
+  };
+
+  // 로딩 중일 때 로딩 화면 표시
+  if (loading && !products.length) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f5f5f5'
+      }}>
+        <div style={{
+          textAlign: 'center',
+          padding: '40px',
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ fontSize: '18px', color: '#666' }}>로딩 중...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // 관리자 권한 확인
+  if (!user || user.user_type !== 'admin') {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f5f5f5'
+      }}>
+        <div style={{
+          textAlign: 'center',
+          padding: '40px',
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          maxWidth: '400px'
+        }}>
+          <h2 style={{ color: '#dc3545', marginBottom: '20px' }}>접근 권한이 없습니다</h2>
+          <p style={{ color: '#666', marginBottom: '30px' }}>관리자만 접근할 수 있는 페이지입니다.</p>
+          <button
+            onClick={() => window.location.href = '/'}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: '600'
+            }}
+          >
+            홈으로 돌아가기
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 폼 초기화
+  const resetForm = () => {
+    setNewProduct({
+      sku: '',
+      name: '',
+      price: '',
+      originalPrice: '',
+      category: '',
+      image: { url: '', publicId: '', alt: '' },
+      additionalImages: [''],
+      description: '',
+      stock: 0,
+      brand: '',
+      tags: [],
+      isActive: true,
+      isFeatured: false,
+      productStatus: 'in_stock'
+    });
+    setShowProductForm(false);
+  };
+
+  // Cloudinary 이미지 업로드 함수
+  const handleImageUpload = () => {
+    // Cloudinary 위젯 설정
+    const widget = window.cloudinary.createUploadWidget(
+      {
+        cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME,
+        uploadPreset: import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET,
+        sources: ['local', 'url', 'camera'],
+        multiple: false,
+        maxFiles: 1,
+        maxFileSize: 10000000, // 10MB
+        clientAllowedFormats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+        folder: 'shopping-mall/products',
+        resourceType: 'image',
+        cropping: true,
+        croppingAspectRatio: 1,
+        showSkipCropButton: false,
+        croppingDefaultSelectionRatio: 1,
+        gravity: 'center',
+        quality: 'auto',
+        fetchFormat: 'auto'
+      },
+      (error, result) => {
+        if (error) {
+          console.error('Cloudinary 업로드 오류:', error);
+          setError('이미지 업로드 중 오류가 발생했습니다.');
+          return;
+        }
+
+        if (result.event === 'success') {
+          const imageData = result.info;
+          setNewProduct({
+            ...newProduct,
+            image: {
+              url: imageData.secure_url,
+              publicId: imageData.public_id,
+              alt: newProduct.image.alt || newProduct.name || '상품 이미지'
+            }
+          });
+          setSuccess('이미지가 성공적으로 업로드되었습니다!');
+          
+          // 3초 후 성공 메시지 자동 제거
+          setTimeout(() => setSuccess(''), 3000);
+        }
+      }
+    );
+
+    // 위젯 열기
+    widget.open();
+  };
+
+  // 대시보드 렌더링
+  const renderDashboard = () => (
+    <div>
+      <h2 style={{ color: '#333', marginBottom: '30px' }}>대시보드</h2>
+      
+      {/* 통계 카드 */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+        gap: '20px',
+        marginBottom: '30px'
+      }}>
+        <div style={{
+          backgroundColor: '#fff',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          borderLeft: '4px solid #1976d2'
+        }}>
+          <h3 style={{ margin: '0 0 10px 0', color: '#1976d2' }}>총 주문</h3>
+          <p style={{ fontSize: '24px', fontWeight: 'bold', margin: 0 }}>{orders.length}</p>
+        </div>
+        
+        <div style={{
+          backgroundColor: '#fff',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          borderLeft: '4px solid #388e3c'
+        }}>
+          <h3 style={{ margin: '0 0 10px 0', color: '#388e3c' }}>총 상품</h3>
+          <p style={{ fontSize: '24px', fontWeight: 'bold', margin: 0 }}>{products.length}</p>
+        </div>
+        
+        <div style={{
+          backgroundColor: '#fff',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          borderLeft: '4px solid #f57c00'
+        }}>
+          <h3 style={{ margin: '0 0 10px 0', color: '#f57c00' }}>총 고객</h3>
+          <p style={{ fontSize: '24px', fontWeight: 'bold', margin: 0 }}>{customers.length}</p>
+        </div>
+        
+        <div style={{
+          backgroundColor: '#fff',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          borderLeft: '4px solid #7b1fa2'
+        }}>
+          <h3 style={{ margin: '0 0 10px 0', color: '#7b1fa2' }}>총 매출</h3>
+          <p style={{ fontSize: '24px', fontWeight: 'bold', margin: 0 }}>
+            ₩{orders.reduce((sum, order) => sum + order.amount, 0).toLocaleString()}
+          </p>
+        </div>
+      </div>
+
+      {/* 최근 주문 */}
+      <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+        <h3 style={{ color: '#333', marginBottom: '15px' }}>최근 주문</h3>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#f8f9fa' }}>
+                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>주문번호</th>
+                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>고객명</th>
+                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>상품</th>
+                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>상태</th>
+                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>금액</th>
+                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>날짜</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.slice(0, 5).map((order) => (
+                <tr key={order.id}>
+                  <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>{order.id}</td>
+                  <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>{order.customer}</td>
+                  <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>{order.product}</td>
+                  <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>
+                    <span style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      backgroundColor: order.status === '배송완료' ? '#d4edda' : order.status === '배송중' ? '#fff3cd' : '#d1ecf1',
+                      color: order.status === '배송완료' ? '#155724' : order.status === '배송중' ? '#856404' : '#0c5460'
+                    }}>
+                      {order.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>₩{order.amount.toLocaleString()}</td>
+                  <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>{order.date}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // 상품 관리 렌더링
+  const renderProducts = () => (
+    <div>
+      {!showProductForm ? (
+        <div>
+          {/* 헤더 */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '30px',
+            padding: '20px',
+            backgroundColor: '#fff',
+            borderRadius: '8px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}>
+            <div>
+              <h2 style={{ color: '#333', margin: 0 }}>상품 관리</h2>
+              <span style={{ color: '#666', fontSize: '14px' }}>총 {products.length}개 상품</span>
+            </div>
+            <button
+              onClick={() => setShowProductForm(true)}
+              style={{
+                padding: '12px 20px',
+                backgroundColor: '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              + 새 상품 추가
+            </button>
+          </div>
+
+          {/* 상품 목록 */}
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '8px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              padding: '20px',
+              borderBottom: '1px solid #e9ecef',
+              backgroundColor: '#f8f9fa'
+            }}>
+              <h3 style={{ color: '#333', margin: 0 }}>상품 목록</h3>
+              <span style={{ color: '#666', fontSize: '14px' }}>총 {products.length}개 상품</span>
+            </div>
+            
+            {loading ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#666' }}>
+                상품 목록을 불러오는 중...
+              </div>
+            ) : error ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#dc3545' }}>
+                {error}
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8f9fa' }}>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>SKU</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>상품명</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>가격</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>재고</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>상태</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" style={{ 
+                          padding: '40px', 
+                          textAlign: 'center', 
+                          color: '#666',
+                          fontSize: '16px'
+                        }}>
+                          등록된 상품이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      products.map((product) => (
+                        <tr key={product._id}>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>
+                            {product.sku}
+                          </td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              {product.image?.url && (
+                                <img 
+                                  src={product.image.url} 
+                                  alt={product.name}
+                                  style={{ 
+                                    width: '40px', 
+                                    height: '40px', 
+                                    objectFit: 'cover', 
+                                    borderRadius: '4px' 
+                                  }}
+                                />
+                              )}
+                              <span>{product.name}</span>
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>
+                            ₩{parseInt(product.price).toLocaleString()}
+                          </td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>
+                            {product.stock}
+                          </td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>
+                            <span style={{ 
+                              padding: '4px 8px', 
+                              borderRadius: '4px', 
+                              fontSize: '12px',
+                              backgroundColor: product.isActive ? '#d4edda' : '#f8d7da',
+                              color: product.isActive ? '#155724' : '#721c24'
+                            }}>
+                              {product.isActive ? '활성' : '비활성'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #eee' }}>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={() => startEditProduct(product)}
+                                style={{
+                                  padding: '6px 12px',
+                                  backgroundColor: '#007bff',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px'
+                                }}
+                              >
+                                편집
+                              </button>
+                              <button
+                                onClick={() => deleteProduct(product._id)}
+                                style={{
+                                  padding: '6px 12px',
+                                  backgroundColor: '#dc3545',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px'
+                                }}
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        // 상품 등록 폼
+        <div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '15px',
+            marginBottom: '30px',
+            padding: '20px',
+            backgroundColor: '#fff',
+            borderRadius: '8px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}>
+            <button
+              onClick={resetForm}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              ← 목록으로
+            </button>
+            <h1 style={{ margin: 0, color: '#333' }}>새 상품 등록</h1>
+          </div>
+
+          {/* 성공/에러 메시지 */}
+          {success && (
+            <div style={{
+              padding: '15px',
+              marginBottom: '20px',
+              backgroundColor: '#d4edda',
+              color: '#155724',
+              border: '1px solid #c3e6cb',
+              borderRadius: '6px'
+            }}>
+              {success}
+            </div>
+          )}
+
+          {error && (
+            <div style={{
+              padding: '15px',
+              marginBottom: '20px',
+              backgroundColor: '#f8d7da',
+              color: '#721c24',
+              border: '1px solid #f5c6cb',
+              borderRadius: '6px'
+            }}>
+              {error}
+            </div>
+          )}
+
+          {/* 상품 등록 폼 */}
+          <form onSubmit={handleSubmit} style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            {/* 기본 정보 섹션 */}
+            <div style={{ marginBottom: '30px' }}>
+              <h3 style={{
+                color: '#333',
+                marginBottom: '20px',
+                paddingBottom: '10px',
+                borderBottom: '2px solid #e9ecef'
+              }}>
+                기본 정보
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#333'
+                  }}>
+                    SKU *
+                  </label>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                      <input
+                        type="text"
+                        value={newProduct.sku}
+                        onChange={(e) => handleSkuChange(e.target.value)}
+                        placeholder="예: PRD-001, TOP001, SHIRT-L-001"
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          border: `1px solid ${skuValidation.isValid ? '#ddd' : '#dc3545'}`,
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          backgroundColor: skuValidation.isValid ? 'white' : '#fff5f5'
+                        }}
+                      />
+                      {skuValidation.message && (
+                        <div style={{
+                          marginTop: '4px',
+                          fontSize: '12px',
+                          color: skuValidation.isValid ? '#28a745' : '#dc3545'
+                        }}>
+                          {skuValidation.message}
+                        </div>
+                      )}
+                      <div style={{
+                        marginTop: '4px',
+                        fontSize: '11px',
+                        color: '#666'
+                      }}>
+                        영문자, 숫자, 하이픈 사용 가능 (3-20자)
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newProduct.category) {
+                          const autoSku = generateSKU(newProduct.category);
+                          setNewProduct({...newProduct, sku: autoSku});
+                        } else {
+                          alert('먼저 카테고리를 선택해주세요.');
+                        }
+                      }}
+                      style={{
+                        padding: '12px 16px',
+                        backgroundColor: '#6c757d',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      자동생성
+                    </button>
+                  </div>
+                  <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                    형식: ABC-123 (비워두면 카테고리 기반으로 자동 생성됩니다)
+                  </small>
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#333'
+                  }}>
+                    상품명 *
+                  </label>
+                  <input
+                    type="text"
+                    value={newProduct.name}
+                    onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#333'
+                  }}>
+                    카테고리 *
+                  </label>
+                  <select
+                    value={newProduct.category}
+                    onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="">카테고리 선택</option>
+                    <option value="상의">상의</option>
+                    <option value="하의">하의</option>
+                    <option value="악세사리">악세사리</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#333'
+                  }}>
+                    브랜드
+                  </label>
+                  <input
+                    type="text"
+                    value={newProduct.brand}
+                    onChange={(e) => setNewProduct({...newProduct, brand: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 가격 정보 섹션 */}
+            <div style={{ marginBottom: '30px' }}>
+              <h3 style={{
+                color: '#333',
+                marginBottom: '20px',
+                paddingBottom: '10px',
+                borderBottom: '2px solid #e9ecef'
+              }}>
+                가격 정보
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#333'
+                  }}>
+                    판매가 *
+                  </label>
+                  <input
+                    type="number"
+                    value={newProduct.price}
+                    onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#333'
+                  }}>
+                    정가
+                  </label>
+                  <input
+                    type="number"
+                    value={newProduct.originalPrice}
+                    onChange={(e) => setNewProduct({...newProduct, originalPrice: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#333'
+                  }}>
+                    재고 수량 *
+                  </label>
+                  <input
+                    type="number"
+                    value={newProduct.stock}
+                    onChange={(e) => setNewProduct({...newProduct, stock: parseInt(e.target.value) || 0})}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 이미지 정보 섹션 */}
+            <div style={{ marginBottom: '30px' }}>
+              <h3 style={{
+                color: '#333',
+                marginBottom: '20px',
+                paddingBottom: '10px',
+                borderBottom: '2px solid #e9ecef'
+              }}>
+                이미지 정보
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#333'
+                  }}>
+                    메인 이미지 *
+                  </label>
+                  
+                  {/* 이미지 미리보기 */}
+                  {newProduct.image.url && (
+                    <div style={{ 
+                      marginBottom: '15px',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      maxWidth: '200px'
+                    }}>
+                      <img 
+                        src={newProduct.image.url} 
+                        alt="미리보기"
+                        style={{ 
+                          width: '100%', 
+                          height: '150px', 
+                          objectFit: 'cover',
+                          display: 'block'
+                        }}
+                      />
+                      <div style={{ 
+                        padding: '8px',
+                        backgroundColor: '#f8f9fa',
+                        fontSize: '12px',
+                        color: '#666'
+                      }}>
+                        {newProduct.image.alt || '이미지 미리보기'}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Cloudinary 업로드 버튼 */}
+                  <button
+                    type="button"
+                    onClick={handleImageUpload}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      marginBottom: '10px'
+                    }}
+                  >
+                    {newProduct.image.url ? '이미지 변경' : '이미지 업로드'}
+                  </button>
+                  
+                  {/* 이미지 URL 표시 (읽기 전용) */}
+                  {newProduct.image.url && (
+                    <input
+                      type="text"
+                      value={newProduct.image.url}
+                      readOnly
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        border: '1px solid #e9ecef',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        backgroundColor: '#f8f9fa',
+                        color: '#666'
+                      }}
+                      placeholder="업로드된 이미지 URL"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontWeight: '600',
+                    color: '#333'
+                  }}>
+                    이미지 설명
+                  </label>
+                  <input
+                    type="text"
+                    value={newProduct.image.alt}
+                    onChange={(e) => setNewProduct({
+                      ...newProduct, 
+                      image: { ...newProduct.image, alt: e.target.value }
+                    })}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                    placeholder="이미지에 대한 설명을 입력하세요"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 상품 설명 섹션 */}
+            <div style={{ marginBottom: '30px' }}>
+              <h3 style={{
+                color: '#333',
+                marginBottom: '20px',
+                paddingBottom: '10px',
+                borderBottom: '2px solid #e9ecef'
+              }}>
+                상품 설명
+              </h3>
+              
+              <textarea
+                value={newProduct.description}
+                onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
+                rows="6"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+
+            {/* 버튼 섹션 */}
+            <div style={{
+              display: 'flex',
+              gap: '15px',
+              justifyContent: 'flex-end',
+              paddingTop: '20px',
+              borderTop: '1px solid #e9ecef'
+            }}>
+              <button
+                type="button"
+                onClick={resetForm}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600'
+                }}
+              >
+                취소
+              </button>
+              
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: loading ? '#6c757d' : '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600'
+                }}
+              >
+                {loading ? '등록 중...' : '상품 등록'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+
+  // 주문 관리 렌더링
+  const renderOrders = () => (
+    <div>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '20px'
+      }}>
+        <h2 style={{ color: '#333', margin: 0 }}>주문 관리</h2>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <select style={{
+            padding: '8px 12px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            fontSize: '14px'
+          }}>
+            <option value="">전체 상태</option>
+            <option value="pending">주문완료</option>
+            <option value="processing">처리중</option>
+            <option value="shipped">배송중</option>
+            <option value="delivered">배송완료</option>
+            <option value="cancelled">취소됨</option>
+          </select>
+        </div>
+      </div>
+
+      <div style={{
+        backgroundColor: '#fff',
+        borderRadius: '8px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        overflow: 'hidden'
+      }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#f8f9fa' }}>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>주문번호</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>고객명</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>상품</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>금액</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>주문일</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>상태</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>관리</th>
+            </tr>
+          </thead>
+          <tbody>
+            {orders.length === 0 ? (
+              <tr>
+                <td colSpan="7" style={{ 
+                  padding: '40px', 
+                  textAlign: 'center', 
+                  color: '#666',
+                  borderBottom: '1px solid #dee2e6'
+                }}>
+                  주문이 없습니다.
+                </td>
+              </tr>
+            ) : (
+              orders.map((order) => (
+                <tr key={order._id || order.id}>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {order.orderNumber || order.id}
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {order.user?.name || order.customer || '알 수 없음'}
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {order.items?.length > 0 
+                      ? `${order.items[0].product?.name || order.items[0].name} ${order.items.length > 1 ? `외 ${order.items.length - 1}개` : ''}`
+                      : order.product || '상품 정보 없음'
+                    }
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {(order.totalAmount || order.amount || 0).toLocaleString()}원
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {new Date(order.createdAt || order.date).toLocaleDateString()}
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    <span style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      backgroundColor: 
+                        order.status === 'delivered' ? '#d4edda' :
+                        order.status === 'shipped' ? '#d1ecf1' :
+                        order.status === 'processing' ? '#fff3cd' :
+                        order.status === 'cancelled' ? '#f8d7da' : '#e2e3e5',
+                      color:
+                        order.status === 'delivered' ? '#155724' :
+                        order.status === 'shipped' ? '#0c5460' :
+                        order.status === 'processing' ? '#856404' :
+                        order.status === 'cancelled' ? '#721c24' : '#383d41'
+                    }}>
+                      {order.status === 'pending' ? '주문완료' :
+                       order.status === 'processing' ? '처리중' :
+                       order.status === 'shipped' ? '배송중' :
+                       order.status === 'delivered' ? '배송완료' :
+                       order.status === 'cancelled' ? '취소됨' : order.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <button style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}>
+                        상세
+                      </button>
+                      <select 
+                        value={order.status}
+                        onChange={(e) => handleOrderStatusUpdate(order._id || order.id, e.target.value)}
+                        style={{
+                          padding: '4px 8px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                          fontSize: '12px'
+                        }}
+                      >
+                        <option value="pending">주문완료</option>
+                        <option value="processing">처리중</option>
+                        <option value="shipped">배송중</option>
+                        <option value="delivered">배송완료</option>
+                        <option value="cancelled">취소됨</option>
+                      </select>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  // 고객 관리 렌더링
+  const renderCustomers = () => (
+    <div>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '20px'
+      }}>
+        <h2 style={{ color: '#333', margin: 0 }}>고객 관리</h2>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <input
+            type="text"
+            placeholder="고객 검색..."
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '14px',
+              width: '200px'
+            }}
+          />
+        </div>
+      </div>
+
+      <div style={{
+        backgroundColor: '#fff',
+        borderRadius: '8px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        overflow: 'hidden'
+      }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#f8f9fa' }}>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>고객명</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>이메일</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>전화번호</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>주문수</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>총 구매액</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>가입일</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>상태</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>관리</th>
+            </tr>
+          </thead>
+          <tbody>
+            {customers.length === 0 ? (
+              <tr>
+                <td colSpan="8" style={{ 
+                  padding: '40px', 
+                  textAlign: 'center', 
+                  color: '#666',
+                  borderBottom: '1px solid #dee2e6'
+                }}>
+                  고객이 없습니다.
+                </td>
+              </tr>
+            ) : (
+              customers.map((customer) => (
+                <tr key={customer._id || customer.id}>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {customer.name}
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {customer.email}
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {customer.phone || '-'}
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {customer.orderCount || customer.orders || 0}
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {(customer.totalSpent || 0).toLocaleString()}원
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    {new Date(customer.createdAt || customer.joinDate).toLocaleDateString()}
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    <span style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      backgroundColor: customer.isActive !== false ? '#d4edda' : '#f8d7da',
+                      color: customer.isActive !== false ? '#155724' : '#721c24'
+                    }}>
+                      {customer.isActive !== false ? '활성' : '비활성'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <button style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}>
+                        상세
+                      </button>
+                      <button 
+                        onClick={() => handleCustomerToggle(customer._id || customer.id)}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: customer.isActive !== false ? '#dc3545' : '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        {customer.isActive !== false ? '비활성화' : '활성화'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
+      {/* 헤더 */}
+      <header style={{
+        backgroundColor: '#fff',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        padding: '0 20px'
+      }}>
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          height: '60px'
+        }}>
+          <h1 style={{ color: '#333', margin: 0 }}>관리자 페이지</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <span style={{ color: '#666' }}>안녕하세요, {user?.name || '관리자'}님</span>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              로그아웃
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* 메인 컨텐츠 */}
+      <div style={{
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: '20px',
+        display: 'flex',
+        gap: '20px'
+      }}>
+        {/* 사이드바 */}
+        <nav style={{
+          width: '250px',
+          backgroundColor: '#fff',
+          borderRadius: '8px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          padding: '20px 0',
+          height: 'fit-content'
+        }}>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            <li>
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                style={{
+                  width: '100%',
+                  padding: '15px 20px',
+                  backgroundColor: activeTab === 'dashboard' ? '#007bff' : 'transparent',
+                  color: activeTab === 'dashboard' ? 'white' : '#333',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                📊 대시보드
+              </button>
+            </li>
+            <li>
+              <button
+                onClick={() => setActiveTab('products')}
+                style={{
+                  width: '100%',
+                  padding: '15px 20px',
+                  backgroundColor: activeTab === 'products' ? '#007bff' : 'transparent',
+                  color: activeTab === 'products' ? 'white' : '#333',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                📦 상품 관리
+              </button>
+            </li>
+            <li>
+              <button
+                onClick={() => setActiveTab('orders')}
+                style={{
+                  width: '100%',
+                  padding: '15px 20px',
+                  backgroundColor: activeTab === 'orders' ? '#007bff' : 'transparent',
+                  color: activeTab === 'orders' ? 'white' : '#333',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                🛒 주문 관리
+              </button>
+            </li>
+            <li>
+              <button
+                onClick={() => setActiveTab('customers')}
+                style={{
+                  width: '100%',
+                  padding: '15px 20px',
+                  backgroundColor: activeTab === 'customers' ? '#007bff' : 'transparent',
+                  color: activeTab === 'customers' ? 'white' : '#333',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                👥 고객 관리
+              </button>
+            </li>
+          </ul>
+        </nav>
+
+        {/* 메인 컨텐츠 영역 */}
+        <main style={{ flex: 1 }}>
+          {/* 성공/에러 메시지 */}
+          {success && (
+            <div style={{
+              padding: '15px',
+              marginBottom: '20px',
+              backgroundColor: '#d4edda',
+              color: '#155724',
+              border: '1px solid #c3e6cb',
+              borderRadius: '6px'
+            }}>
+              {success}
+            </div>
+          )}
+
+          {error && (
+            <div style={{
+              padding: '15px',
+              marginBottom: '20px',
+              backgroundColor: '#f8d7da',
+              color: '#721c24',
+              border: '1px solid #f5c6cb',
+              borderRadius: '6px'
+            }}>
+              {error}
+            </div>
+          )}
+
+          {/* 탭별 컨텐츠 */}
+          {activeTab === 'dashboard' && renderDashboard()}
+          {activeTab === 'products' && renderProducts()}
+          {activeTab === 'orders' && renderOrders()}
+          {activeTab === 'customers' && renderCustomers()}
+        </main>
+      </div>
+
+      {/* 상품 편집 모달 */}
+      {showEditModal && editingProduct && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '30px',
+            width: '90%',
+            maxWidth: '600px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '25px',
+              paddingBottom: '15px',
+              borderBottom: '1px solid #e9ecef'
+            }}>
+              <h2 style={{ color: '#333', margin: 0 }}>상품 편집</h2>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingProduct(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#666'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateProduct}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                {/* SKU */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                    SKU *
+                  </label>
+                  <div>
+                    <input
+                      type="text"
+                      value={editingProduct.sku}
+                      onChange={(e) => handleEditSkuChange(e.target.value)}
+                      placeholder="예: PRD-001, TOP001, SHIRT-L-001"
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        border: `1px solid ${editSkuValidation.isValid ? '#ddd' : '#dc3545'}`,
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        backgroundColor: editSkuValidation.isValid ? 'white' : '#fff5f5'
+                      }}
+                      required
+                    />
+                    {editSkuValidation.message && (
+                      <div style={{
+                        marginTop: '4px',
+                        fontSize: '12px',
+                        color: editSkuValidation.isValid ? '#28a745' : '#dc3545'
+                      }}>
+                        {editSkuValidation.message}
+                      </div>
+                    )}
+                    <div style={{
+                      marginTop: '4px',
+                      fontSize: '11px',
+                      color: '#666'
+                    }}>
+                      영문자, 숫자, 하이픈 사용 가능 (3-20자)
+                    </div>
+                  </div>
+                </div>
+
+                {/* 상품명 */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                    상품명 *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingProduct.name}
+                    onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})}
+                    placeholder="상품명을 입력하세요"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                {/* 가격 */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                    가격 *
+                  </label>
+                  <input
+                    type="number"
+                    value={editingProduct.price}
+                    onChange={(e) => setEditingProduct({...editingProduct, price: e.target.value})}
+                    placeholder="가격을 입력하세요"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                    required
+                  />
+                </div>
+
+                {/* 카테고리 */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                    카테고리 *
+                  </label>
+                  <select
+                    value={editingProduct.category}
+                    onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                    required
+                  >
+                    <option value="">카테고리 선택</option>
+                    <option value="상의">상의</option>
+                    <option value="하의">하의</option>
+                    <option value="악세사리">악세사리</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 이미지 URL */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                  이미지 URL *
+                </label>
+                <input
+                  type="url"
+                  value={editingProduct.image?.url || ''}
+                  onChange={(e) => setEditingProduct({
+                    ...editingProduct, 
+                    image: { ...editingProduct.image, url: e.target.value }
+                  })}
+                  placeholder="이미지 URL을 입력하세요"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                  required
+                />
+              </div>
+
+              {/* 설명 */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                  상품 설명
+                </label>
+                <textarea
+                  value={editingProduct.description || ''}
+                  onChange={(e) => setEditingProduct({...editingProduct, description: e.target.value})}
+                  placeholder="상품 설명을 입력하세요"
+                  rows="4"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* 재고 */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                  재고 수량 *
+                </label>
+                <input
+                  type="number"
+                  value={editingProduct.stock}
+                  onChange={(e) => setEditingProduct({...editingProduct, stock: parseInt(e.target.value) || 0})}
+                  placeholder="재고 수량을 입력하세요"
+                  min="0"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                  required
+                />
+              </div>
+
+              {/* 버튼들 */}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newSku = generateSKU(editingProduct.category);
+                    setEditingProduct({...editingProduct, sku: newSku});
+                    const validation = validateSKU(newSku);
+                    setEditSkuValidation(validation);
+                  }}
+                  style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  SKU 자동생성
+                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setEditingProduct(null);
+                      setEditSkuValidation({ isValid: true, message: '' });
+                    }}
+                    style={{
+                      padding: '12px 24px',
+                      backgroundColor: '#6c757d',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    취소
+                  </button>
+
+                {/* 상품명 */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                    상품명 *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingProduct.name}
+                    onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                {/* 카테고리 */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                    카테고리 *
+                  </label>
+                  <select
+                    value={editingProduct.category}
+                    onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                    required
+                  >
+                    <option value="">선택</option>
+                    <option value="상의">상의</option>
+                    <option value="하의">하의</option>
+                    <option value="아우터">아우터</option>
+                    <option value="신발">신발</option>
+                    <option value="액세서리">액세서리</option>
+                  </select>
+                </div>
+
+                {/* 브랜드 */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                    브랜드
+                  </label>
+                  <input
+                    type="text"
+                    value={editingProduct.brand || ''}
+                    onChange={(e) => setEditingProduct({...editingProduct, brand: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                {/* 가격 */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                    가격 *
+                  </label>
+                  <input
+                    type="number"
+                    value={editingProduct.price}
+                    onChange={(e) => setEditingProduct({...editingProduct, price: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                    required
+                  />
+                </div>
+
+                {/* 원가 */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                    원가
+                  </label>
+                  <input
+                    type="number"
+                    value={editingProduct.originalPrice}
+                    onChange={(e) => setEditingProduct({...editingProduct, originalPrice: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                {/* 재고 */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                    재고 *
+                  </label>
+                  <input
+                    type="number"
+                    value={editingProduct.stock}
+                    onChange={(e) => setEditingProduct({...editingProduct, stock: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* 설명 */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                  상품 설명
+                </label>
+                <textarea
+                  value={editingProduct.description || ''}
+                  onChange={(e) => setEditingProduct({...editingProduct, description: e.target.value})}
+                  rows="4"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* 상태 */}
+              <div style={{ marginBottom: '30px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={editingProduct.isActive}
+                    onChange={(e) => setEditingProduct({...editingProduct, isActive: e.target.checked})}
+                  />
+                  <span style={{ fontWeight: '600', color: '#333' }}>상품 활성화</span>
+                </label>
+              </div>
+
+              {/* 버튼 그룹 */}
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => deleteProduct(editingProduct._id)}
+                  style={{
+                    padding: '12px 20px',
+                    backgroundColor: '#dc3545',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600'
+                  }}
+                >
+                  삭제
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingProduct(null);
+                  }}
+                  style={{
+                    padding: '12px 20px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600'
+                  }}
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    padding: '12px 20px',
+                    backgroundColor: loading ? '#ccc' : '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600'
+                  }}
+                >
+                  {loading ? '수정 중...' : '수정'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminPage;
