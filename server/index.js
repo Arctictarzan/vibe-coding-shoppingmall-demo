@@ -9,17 +9,32 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// 미들웨어 설정
-const allowedOrigins = [
-  'http://localhost:5173', // 개발 환경
-  process.env.CLIENT_URL || 'https://your-app.vercel.app' // 프로덕션 환경
-].filter(Boolean);
+// 미들웨어 설정 - 유연한 CORS 설정
+const corsOptions = {
+  origin: function (origin, callback) {
+    // 허용할 도메인들
+    const allowedOrigins = [
+      'http://localhost:5173', // 로컬 개발
+      'http://localhost:3000', // 로컬 개발 (추가)
+      process.env.CLIENT_URL // Heroku 환경변수
+    ].filter(Boolean);
 
-app.use(cors({
-  origin: allowedOrigins,
+    // origin이 없거나 (Postman 등), vercel.app 도메인이거나, 허용된 도메인인 경우
+    if (!origin || 
+        origin.includes('vercel.app') || 
+        allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('CORS 차단된 도메인:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
