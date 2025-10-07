@@ -1,0 +1,32 @@
+{
+  "name": "shopping-mall-demo",
+  "version": "1.0.0",
+  "description": "Shopping Mall Demo - Full Stack Application (Monorepo)",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "cd server && npm start",
+    "dev": "cd server && npm run dev",
+    "postinstall": "cd server && npm install",
+    "install-server": "cd server && npm install",
+    "install-client": "cd Client && npm install",
+    "build": "cd Client && npm run build",
+    "heroku-postbuild": "cd server && npm install --production"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "shopping-mall",
+    "ecommerce",
+    "nodejs",
+    "express",
+    "mongodb",
+    "react",
+    "monorepo"
+  ],
+  "author": "immissingy1",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
