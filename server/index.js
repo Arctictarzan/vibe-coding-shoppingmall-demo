@@ -13,11 +13,12 @@ const PORT = process.env.PORT || 5000;
 const corsOptions = {
   origin: function (origin, callback) {
     // 허용할 도메인들
-    const allowedOrigins = [
-      'http://localhost:5173', // 로컬 개발
-      'http://localhost:3000', // 로컬 개발 (추가)
-      process.env.CLIENT_URL // Heroku 환경변수
-    ].filter(Boolean);
+     const allowedOrigins = [
+       'http://localhost:5173', // 로컬 개발
+       'http://localhost:3000', // 로컬 개발 (추가)
+       process.env.CLIENT_URL, // 기존 환경변수 (호환성)
+       process.env.FRONTEND_URL // 새로운 환경변수
+     ].filter(Boolean);
 
     // origin이 없거나 (Postman 등), vercel.app 도메인이거나, 허용된 도메인인 경우
     if (!origin || 
